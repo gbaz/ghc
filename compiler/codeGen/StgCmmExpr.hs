@@ -922,12 +922,18 @@ emitEnter fun = do
       --
       AssignTo res_regs _ -> do
        { lret <- newBlockId
-       ; let (off, _, copyin) = copyInOflow dflags NativeReturn (Young lret) res_regs []
-       ; lcall <- newBlockId
-       ; updfr_off <- getUpdFrameOff
+       ; lnocall <- newBlockId
        ; let area = Young lret
+       ; let (off, _, copyin) = copyInOflow dflags NativeReturn area res_regs []
        ; let (outArgs, regs, copyout) = copyOutOflow dflags NativeNodeCall Call area
                                           [fun] updfr_off []
+       ; let area2 = Young lnocall
+       ; let (_, _, copyin2) = copyInOflow dflags NativeReturn area2 res_regs []
+       ; let (_, _, copyout2) = copyOutOflow dflags NativeNodeCall Call area2
+                                          [fun] updfr_off []
+       ; lcall <- newBlockId
+       ; lfinal  <- newBlockId
+       ; updfr_off <- getUpdFrameOff
          -- refer to fun via nodeReg after the copyout, to avoid having
          -- both live simultaneously; this sometimes enables fun to be
          -- inlined in the RHS of the R1 assignment.
@@ -935,12 +941,18 @@ emitEnter fun = do
              the_call = toCall entry (Just lret) updfr_off off outArgs regs
        ; tscope <- getTickScope
        ; emit $
+           mkCbranch (cmmIsTagged dflags fun)
+                     lnocall lcall Nothing <*>
+           mkLabel lcall tscope <*>
            copyout <*>
-           mkCbranch (cmmIsTagged dflags (CmmReg nodeReg))
-                     lret lcall Nothing <*>
-           outOfLine lcall (the_call,tscope) <*>
+           the_call <*>
            mkLabel lret tscope <*>
-           copyin
+           copyin <*>
+           mkBranch lfinal <*>
+           mkLabel lnocall tscope <*>
+           copyout <*>
+           copyin <*>
+           mkLabel lfinal tscope
        ; return (ReturnedTo lret off)
        }
   }
