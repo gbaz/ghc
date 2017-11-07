@@ -924,14 +924,15 @@ emitEnter fun = do
        { lret <- newBlockId
        ; lnocall <- newBlockId
        ; let area = Young lret
+       ; let area2 = Young lnocall
        ; let (off, _, copyin) = copyInOflow dflags NativeReturn area res_regs []
        ; let (outArgs, regs, copyout) = copyOutOflow dflags NativeNodeCall Call area
                                           [fun] updfr_off []
-       ; let area2 = Young lnocall
        ; let (_, _, copyin2) = copyInOflow dflags NativeReturn area2 res_regs []
-       ; let (_, _, copyout2) = copyOutOflow dflags NativeNodeCall Call area2
+       ; let (_, _, copyout2) = copyOutOflow dflags NativeNodeCall Ret area2
                                           [fun] updfr_off []
        ; lcall <- newBlockId
+       ; ldocall <- newBlockId
        ; lfinal  <- newBlockId
        ; updfr_off <- getUpdFrameOff
          -- refer to fun via nodeReg after the copyout, to avoid having
@@ -942,14 +943,15 @@ emitEnter fun = do
        ; tscope <- getTickScope
        ; emit $
            mkCbranch (cmmIsTagged dflags fun)
-                     lnocall lcall Nothing <*>
-           mkLabel lcall tscope <*>
+                     lnocall ldocall Nothing <*>
+           mkLabel ldocall tscope <*>
            copyout <*>
            the_call <*>
            mkLabel lret tscope <*>
            copyin <*>
            mkBranch lfinal <*>
            mkLabel lnocall tscope <*>
+           -- Can we write an assignment directly here?
            copyout <*>
            copyin <*>
            mkLabel lfinal tscope
